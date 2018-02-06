@@ -8,6 +8,7 @@
               <input type="hidden" name="transaction_id" t-att-value="item_number"/>
               <input type="hidden" name="subject" t-att-value="subject"/>
               <input type="hidden" name="amount" t-att-value="amount"/>
+              <input type="hidden" name="currency" t-att-value="currency"/>
               <input type="hidden" name="body" t-att-value="body"/>
               <input t-if="handling" type="hidden" name="handling"
                   t-att-value="handling"/>
