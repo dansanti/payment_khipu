@@ -16,7 +16,7 @@ _logger = logging.getLogger(__name__)
 try:
     pool = urllib3.PoolManager()
 except:
-    pass
+    _logger.warning("No se puede cargar urllib3")
 
 
 class KhipuController(http.Controller):
@@ -80,7 +80,7 @@ class KhipuController(http.Controller):
         acquirer = request.env['payment.acquirer'].browse(acquirer_id)
         result =  acquirer.khipu_initTransaction(post)
         _logger.warning("reditect%s" %result)
-        uopen = pool.request('GET', result['url'])
+        uopen = pool.request('GET', result.payment_url)
         resp = uopen.data
         values={
             'khipu_redirect': resp,

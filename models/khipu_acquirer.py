@@ -13,7 +13,7 @@ from odoo.tools.translate import _
 _logger = logging.getLogger(__name__)
 
 try:
-    from .khipu import Khipu
+    from .pykhipu.client import Client
 except:
     _logger.warning("No se puede cargar Khipu")
 
@@ -59,6 +59,7 @@ class PaymentAcquirerKhipu(models.Model):
         d = datetime.now() + timedelta(hours=1)
         values.update({
             'business': self.company_id.name,
+            'currency': values['currency'].name,
             'subject': '%s: %s' % (self.company_id.name, values['reference']),
             'body': values['reference'],
             'amount': values['amount'],
@@ -78,18 +79,18 @@ class PaymentAcquirerKhipu(models.Model):
         return self._get_khipu_urls(self.environment)['khipu_form_url']
 
     def khipu_get_client(self,):
-        return Khipu(
+        return Client(
                 self.khipu_receiver_id,
                 self.khipu_private_key,
             )
 
     def khipu_get_banks(self):
         client = self.khipu_get_client()
-        return client.service('ReceiverBanks')
+        return client.banks.get()
 
     def khipu_initTransaction(self, post):
         client = self.khipu_get_client()
-        return client.service('CreatePaymentURL', **post)
+        return client.payments(post['subject'], post['currency'], post['amount'], **post)
 
 
 class PaymentTxKhipu(models.Model):
