@@ -51,7 +51,7 @@ class PaymentAcquirerKhipu(models.Model):
 
     @api.multi
     def khipu_form_generate_values(self, values):
-        banks = self.khipu_get_banks()#@TODO mostrar listados de bancos
+        #banks = self.khipu_get_banks()#@TODO mostrar listados de bancos
         #_logger.warning("banks %s" %banks)
         base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
         d = datetime.now() + timedelta(hours=1)
@@ -64,12 +64,12 @@ class PaymentAcquirerKhipu(models.Model):
             'body': values['reference'],
             'amount': values['amount'],
             'payer_email': values['partner_email'],
-            'banks': banks,
+            #'banks': banks,
             'expires_date': time.mktime(d.timetuple()) ,
             'custom': values.get('custom', 'No Custom Data'),
             'notify_url': base_url + '/payment/khipu/notify',
-            'return_url': base_url + '/payment/khipu/return_url',
-            'cancel_url': base_url + '/payment/khipu/cancel_url',
+            'return_url': base_url + '/payment/khipu/return',
+            'cancel_url': base_url + '/payment/khipu/cancel',
             'picture_url': base_url + '/web/image/res.company/%s/logo' % values.get('company_id', self.env.user.company_id.id),
         })
         return values
@@ -91,32 +91,29 @@ class PaymentAcquirerKhipu(models.Model):
     def khipu_initTransaction(self, post):
         del(post['acquirer_id'])
         del(post['expires_date']) #Fix Formato que solicita Khipu
+        post['return_url'] += '/%s' % str(post.get('transaction_id'))
+        post['notify_url'] += '/%s' % str(self.id)
+        post['cancel_url'] += '/%s' % str(self.id)
         client = self.khipu_get_client()
-        return client.payments.post(post)
+        res = client.payments.post(post)
+        if hasattr(res, 'payment_url'):
+            tx = self.env['payment.transaction'].search([('reference','=', post.get('transaction_id'))])
+            tx.status = 'pending'
+        return res
 
 
 class PaymentTxKhipu(models.Model):
     _inherit = 'payment.transaction'
 
-    @api.model
-    def _khipu_form_get_tx_from_data(self, data):
-        reference, txn_id = data.get('item_number'), data.get('txn_id')
-        if not reference or not txn_id:
-            error_msg = _('Khipu: received data with missing reference (%s) or txn_id (%s)') % (reference, txn_id)
-            _logger.info(error_msg)
-            raise ValidationError(error_msg)
+    def khipu_getTransaction(self, acquirer_id, data):
+        client = acquirer_id.khipu_get_client()
+        return client.payments.get(data['notification_token'])
 
-        # find tx -> @TDENOTE use txn_id ?
-        txs = self.env['payment.transaction'].search([('reference', '=', reference)])
-        if not txs or len(txs) > 1:
-            error_msg = 'Khipu: received data for reference %s' % (reference)
-            if not txs:
-                error_msg += '; no order found'
-            else:
-                error_msg += '; multiple order found'
-            _logger.info(error_msg)
-            raise ValidationError(error_msg)
-        return txs[0]
+    def khipu_validate_tx(self, data):
+        res = {}
+        date_tx = datetime.now()#data.transactionDate
+        res.update(state='done', date_validate=date_tx)
+        self.sudo().write(res)
 
     @api.multi
     def _khipu_form_validate(self, data):
