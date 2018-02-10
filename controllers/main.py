@@ -14,9 +14,10 @@ from odoo.http import request
 _logger = logging.getLogger(__name__)
 
 try:
+    import urllib3
     pool = urllib3.PoolManager()
 except:
-    _logger.warning("No se puede cargar urllib3")
+    pass
 
 
 class KhipuController(http.Controller):
@@ -79,10 +80,11 @@ class KhipuController(http.Controller):
         acquirer_id = int(post.get('acquirer_id'))
         acquirer = request.env['payment.acquirer'].browse(acquirer_id)
         result =  acquirer.khipu_initTransaction(post)
-        _logger.warning("reditect%s" %result)
-        uopen = pool.request('GET', result.payment_url)
-        resp = uopen.data
-        values={
-            'khipu_redirect': resp,
-        }
-        return request.website.render('payment_khipu.khipu_redirect', values)
+        #uopen = pool.request('GET', result.payment_url)
+        #resp = uopen.data
+        return werkzeug.utils.redirect(result.payment_url)
+        #@TODO render error
+        #values={
+        #    'khipu_redirect': resp,
+        #}
+        return request.render('payment_khipu.khipu_redirect', values)
