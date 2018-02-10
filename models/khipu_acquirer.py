@@ -51,14 +51,14 @@ class PaymentAcquirerKhipu(models.Model):
 
     @api.multi
     def khipu_form_generate_values(self, values):
-        _logger.warning("set")
-        _logger.warning(values)
-        banks = self.khipu_get_banks()
-        _logger.warning("banks %s" %banks)
+        banks = self.khipu_get_banks()#@TODO mostrar listados de bancos
+        #_logger.warning("banks %s" %banks)
         base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
         d = datetime.now() + timedelta(hours=1)
         values.update({
+            'acquirer_id': self.id,
             'business': self.company_id.name,
+            'item_number': values['reference'],
             'currency': values['currency'].name,
             'subject': '%s: %s' % (self.company_id.name, values['reference']),
             'body': values['reference'],
@@ -89,8 +89,10 @@ class PaymentAcquirerKhipu(models.Model):
         return client.banks.get()
 
     def khipu_initTransaction(self, post):
+        del(post['acquirer_id'])
+        del(post['expires_date']) #Fix Formato que solicita Khipu
         client = self.khipu_get_client()
-        return client.payments(post['subject'], post['currency'], post['amount'], **post)
+        return client.payments.post(post)
 
 
 class PaymentTxKhipu(models.Model):
