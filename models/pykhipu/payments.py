@@ -19,15 +19,11 @@ class Payments(object):
             params={ 'notification_token': notification_token })
         return PaymentsResponse.from_response(response)
 
-    def post(self, subject, currency, amount, **kwargs):
+    def post(self, data):
         """
         Crea un pago en khipu y obtiene las URLs para redirección al usuario
         para que complete el pago.
         """
-        data = {'subject': subject,
-                'currency': currency,
-                'amount': amount }
-        data.update(kwargs)
         if hasattr(data, 'expires_date'):
             if isinstance(data['expires_date'], datetime):
                 data['expires_date'] = data['expires_date'].isoformat()
