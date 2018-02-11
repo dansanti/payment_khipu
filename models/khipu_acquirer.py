@@ -89,31 +89,45 @@ class PaymentAcquirerKhipu(models.Model):
         return client.banks.get()
 
     def khipu_initTransaction(self, post):
+        tx = self.env['payment.transaction'].search([('reference','=', post.get('transaction_id'))])
         del(post['acquirer_id'])
         del(post['expires_date']) #Fix Formato que solicita Khipu
-        post['return_url'] += '/%s' % str(post.get('transaction_id'))
+        post['return_url'] += '/%s' % str(tx.id)
         post['notify_url'] += '/%s' % str(self.id)
         post['cancel_url'] += '/%s' % str(self.id)
         client = self.khipu_get_client()
         res = client.payments.post(post)
         if hasattr(res, 'payment_url'):
-            tx = self.env['payment.transaction'].search([('reference','=', post.get('transaction_id'))])
-            tx.status = 'pending'
+            tx.write({'state': 'pending'})
         return res
+
+    def khipu_getTransaction(self, data):
+        client = self.khipu_get_client()
+        return client.payments.get(data['notification_token'])
 
 
 class PaymentTxKhipu(models.Model):
     _inherit = 'payment.transaction'
 
-    def khipu_getTransaction(self, acquirer_id, data):
-        client = acquirer_id.khipu_get_client()
-        return client.payments.get(data['notification_token'])
+    @api.model
+    def _khipu_form_get_tx_from_data(self, data):
+        reference, txn_id = data.transaction_id, data.payment_id
+        if not reference or not txn_id:
+            error_msg = _('Khipu: received data with missing reference (%s) or txn_id (%s)') % (reference, txn_id)
+            _logger.info(error_msg)
+            raise ValidationError(error_msg)
 
-    def khipu_validate_tx(self, data):
-        res = {}
-        date_tx = datetime.now()#data.transactionDate
-        res.update(state='done', date_validate=date_tx)
-        self.sudo().write(res)
+        # find tx -> @TDENOTE use txn_id ?
+        txs = self.env['payment.transaction'].search([('reference', '=', reference)])
+        if not txs or len(txs) > 1:
+            error_msg = 'Khipu: received data for reference %s' % (reference)
+            if not txs:
+                error_msg += '; no order found'
+            else:
+                error_msg += '; multiple order found'
+            _logger.info(error_msg)
+            raise ValidationError(error_msg)
+        return txs[0]
 
     @api.multi
     def _khipu_form_validate(self, data):
@@ -128,21 +142,20 @@ class PaymentTxKhipu(models.Model):
                 '-7' : 'Excede límite diario por transacción.',
                 '-8' : 'Rubro no autorizado.',
             }
-        status = data.get('payment_status')
+        status = data.status
         res = {
-            'acquirer_reference': data.get('txn_id'),
-            'paypal_txn_type': data.get('payment_type'),
+            'acquirer_reference': data.payment_id,
         }
-        if status in ['0']:
-            _logger.info('Validated khipu payment for tx %s: set as done' % (tx.reference))
-            res.update(state='done', date_validate=data.transactionDate)
-            return tx.write(res)
+        if status in ['done']:
+            _logger.info('Validated khipu payment for tx %s: set as done' % (self.reference))
+            res.update(state='done', date_validate=datetime.now())
+            return self.write(res)
         elif status in ['-6', '-7']:
-            _logger.warning('Received notification for khipu payment %s: set as pending' % (tx.reference))
+            _logger.warning('Received notification for khipu payment %s: set as pending' % (self.reference))
             res.update(state='pending', state_message=data.get('pending_reason', ''))
-            return tx.write(res)
+            return self.write(res)
         else:
-            error = 'Received unrecognized status for khipu payment %s: %s, set as error' % (tx.reference, codes[status].decode('utf-8'))
+            error = 'Received unrecognized status for khipu payment %s: %s, set as error' % (self.reference, codes[status].decode('utf-8'))
             _logger.warning(error)
             res.update(state='error', state_message=error)
-            return tx.write(res)
+            return self.write(res)
